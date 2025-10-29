@@ -369,71 +369,178 @@ class TextProcessor:
         self.processed_dir = "processed_chunks"
         os.makedirs(self.processed_dir, exist_ok=True)
         
-        # Define project type rules
+         # Define project type rules - NOW SUPPORTS MULTIPLE LABELS
         self.project_type_rules = {
-            "Healthcare AI": ["healthcare", "medical", "cancer", "oncology", "diagnostic", "patient", "clinical"],
-            "Financial Analytics": ["finance", "investment", "stock", "trading", "portfolio", "monte carlo", "analytics"],
-            "Entertainment AI": ["celebrity", "talent", "entertainment", "event", "hosting"],
-            "Surveillance & Inspection": ["drone", "surveillance", "inspection", "monitoring", "warehouse"],
-            "Data Analytics": ["excel", "spreadsheet", "data insight", "reporting", "automation"],
-            "Video Analytics": ["video", "multimedia", "content analysis"],
-            "Legal Tech": ["legal", "document", "contract", "compliance", "regulation"],
-            "Developer Tools": ["code", "debugging", "developer", "api", "sdk"],
-            "Chatbot & NLP": ["chatbot", "conversational", "nlp", "natural language"],
-            "RegTech": ["regulatory", "compliance", "rbi", "fed", "apra"],
+            "AI / Generative AI Platforms": [
+                "generative ai", "llm", "chatbot", "conversational", "nlp", 
+                "natural language", "gpt", "claude", "ai platform", "agentic", 
+                "langchain", "openai"
+            ],
+            "Data Analytics / Predictive Modeling": [
+                "analytics", "predictive", "forecasting", "time series", 
+                "monte carlo", "simulation", "statistical", "modeling", 
+                "data insight", "reporting", "dashboard"
+            ],
+            "Healthcare": [
+                "healthcare", "medical", "cancer", "oncology", "diagnostic", 
+                "patient", "clinical", "health", "disease"
+            ],
+            "Agentic Workflow Systems": [
+                "agentic", "workflow", "automation", "orchestration", 
+                "pipeline", "etl", "batch processing", "task management"
+            ],
+            "Video Analytics / Computer Vision": [
+                "video", "computer vision", "image recognition", "multimedia", 
+                "content analysis", "visual", "cv", "detection", "frame"
+            ],
+            "AI-Based Surveillance / Drone Solutions": [
+                "drone", "surveillance", "inspection", "monitoring", 
+                "warehouse", "uav", "aerial", "security", "iot"
+            ],
+            "Fintech / Banking Analytics": [
+                "fintech", "banking", "finance", "investment", "stock", 
+                "trading", "portfolio", "regulatory", "compliance", 
+                "rbi", "fed", "apra", "excel"
+            ],
+            "Media Technology": [
+                "media", "entertainment", "production technology", 
+                "hybrid site operations", "vmware", "infrastructure", 
+                "network architecture", "data center", "security vulnerability",
+                "resilience engineering", "it policy", "technology strategy"
+            ]
         }
-        
+            
         # Define common technical keywords
         self.tech_keywords = [
-            "AI", "machine learning", "deep learning", "neural network",
-            "data pipeline", "ETL", "analytics", "predictive",
-            "generative AI", "LLM", "chatbot", "NLP",
-            "cloud", "AWS", "deployment", "scalable",
-            "Django", "React", "API", "REST",
-            "automation", "workflow", "agentic",
-            "real-time", "streaming", "batch processing",
-            "recommendation", "personalization",
-            "computer vision", "image recognition",
-            "time series", "forecasting"
+            # AI/ML Core
+            "AI", "machine learning", "deep learning", "neural network", 
+            "generative AI", "LLM", "GPT", "transformer", "NLP",
+            
+            # Data & Analytics
+            "data pipeline", "ETL", "analytics", "predictive modeling", 
+            "forecasting", "Monte Carlo", "statistical modeling",
+            
+            # Development
+            "Django", "React", "API", "REST", "cloud", "AWS", 
+            "deployment", "scalable", "microservices",
+            
+            # Specialized
+            "chatbot", "conversational AI", "computer vision", 
+            "image recognition", "video analytics", "drone technology",
+            
+            # Automation & Workflow
+            "automation", "workflow", "agentic", "real-time", 
+            "streaming", "batch processing", "orchestration",
+            
+            # Infrastructure & Operations
+            "VMware", "infrastructure", "network architecture", 
+            "data center", "security vulnerability", "resilience",
+            
+            # Business
+            "recommendation", "personalization", "compliance", 
+            "regulatory", "investment analytics", "Excel automation",
+            "productivity enhancement"
         ]
     
+    # def _extract_metadata_rule_based(self, text: str) -> Dict:
+    #     """Extract project type and keywords using rules"""
+    #     text_lower = text.lower()
+        
+    #     # Determine project type
+    #     project_type = "General AI Solution"
+    #     max_matches = 0
+        
+    #     for ptype, keywords in self.project_type_rules.items():
+    #         matches = sum(1 for kw in keywords if kw in text_lower)
+    #         if matches > max_matches:
+    #             max_matches = matches
+    #             project_type = ptype
+        
+    #     # Extract keywords
+    #     found_keywords = []
+    #     for keyword in self.tech_keywords:
+    #         if keyword.lower() in text_lower:
+    #             found_keywords.append(keyword)
+        
+    #     # Add domain-specific keywords from text
+    #     words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
+    #     for word in words[:10]:
+    #         if len(word) > 3 and word not in found_keywords:
+    #             found_keywords.append(word)
+        
+    #     # Limit to 7 keywords
+    #     found_keywords = found_keywords[:7]
+        
+    #     if self.verbose:
+    #         print(f"✅ Extracted: Type='{project_type}', Keywords={found_keywords[:3]}...\n")
+        
+    #     return {
+    #         "project_type": project_type,
+    #         "keywords": found_keywords
+    #     }
+
     def _extract_metadata_rule_based(self, text: str) -> Dict:
-        """Extract project type and keywords using rules"""
+        """Extract multiple project types and exactly 5 keywords using rules"""
         text_lower = text.lower()
         
-        # Determine project type
-        project_type = "General AI Solution"
-        max_matches = 0
+        # Determine ALL matching project types (multi-label)
+        matched_types = []
+        type_scores = {}
         
         for ptype, keywords in self.project_type_rules.items():
             matches = sum(1 for kw in keywords if kw in text_lower)
-            if matches > max_matches:
-                max_matches = matches
-                project_type = ptype
+            if matches > 0:
+                type_scores[ptype] = matches
         
-        # Extract keywords
-        found_keywords = []
+        # Sort by match count and take top matches
+        sorted_types = sorted(type_scores.items(), key=lambda x: x[1], reverse=True)
+        
+        # Take all types with at least 1 match, or default to first type
+        if sorted_types:
+            # Include all types with matches (you can limit to top 3 if needed)
+            matched_types = [ptype for ptype, score in sorted_types if score > 0]
+        else:
+            matched_types = ["AI / Generative AI Platforms"]  # Default
+        
+        # Extract keywords with scoring
+        keyword_scores = {}
+        
+        # Score technical keywords
         for keyword in self.tech_keywords:
             if keyword.lower() in text_lower:
-                found_keywords.append(keyword)
+                count = text_lower.count(keyword.lower())
+                keyword_scores[keyword] = count
         
-        # Add domain-specific keywords from text
-        words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
-        for word in words[:10]:
-            if len(word) > 3 and word not in found_keywords:
-                found_keywords.append(word)
+        # Sort by frequency and get top 5
+        sorted_keywords = sorted(
+            keyword_scores.items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        )
+        found_keywords = [kw for kw, score in sorted_keywords[:5]]
         
-        # Limit to 7 keywords
-        found_keywords = found_keywords[:7]
+        # If less than 5, extract capitalized phrases
+        if len(found_keywords) < 5:
+            words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
+            for word in words:
+                if len(word) > 3 and word not in found_keywords:
+                    found_keywords.append(word)
+                    if len(found_keywords) == 5:
+                        break
+        
+        # Ensure exactly 5 keywords
+        while len(found_keywords) < 5:
+            found_keywords.append(f"General_{len(found_keywords)}")
+        
+        found_keywords = found_keywords[:5]
         
         if self.verbose:
-            print(f"✅ Extracted: Type='{project_type}', Keywords={found_keywords[:3]}...\n")
+            print(f"✅ Extracted: Types={matched_types}, Keywords={found_keywords}\n")
         
         return {
-            "project_type": project_type,
+            "project_type": matched_types,  # NOW A LIST!
             "keywords": found_keywords
         }
-    
     def _extract_projects(self, text: str) -> List[Dict]:
         """Extract projects from text"""
         projects = []

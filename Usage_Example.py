@@ -16,12 +16,32 @@
 
 
 
+# """
+# Usage Example - How to use the RAG System
+# """
+# from rag_service import rag_retrieve
+
+# question ="Find projects related to Media & Entertainment IT, Production Technology, Hybrid Site Operations, IT Operations, Security Initiatives, Data Center Design, VMware Infrastructure, Network Architecture, Security Vulnerability Mitigation, Workflow Automation, Infrastructure Modernization, Resilience Engineering, IT Policy Development, Technology Strategy Alignment, and Productivity Enhancement."
+
+# result = rag_retrieve(question)
+# print(f"💡 Answer:\n{result}\n")
+
+
+
+
 """
 Usage Example - How to use the RAG System
 """
 from rag_service import rag_retrieve
 
-question =" Retrieve documents on the following projects: DORIS (digital oncology platform built with Django, Langchain, AWS for agentic workflow), Videochef (video analysis platform enabling search and interaction within videos), Volar Alta (AI‑driven drone surveillance for cement industry and warehouses), Fintellix (generative AI chatbot providing regulatory updates from RBI, FED, APRA for banks), Socketmobile (intelligent agentic code debugging tool with data pipeline and web crawler), Excelinsight (AI‑powered platform for large Excel file insights, automation, reporting, enrichment, and discrepancy detection)"
+# ============================================
+# Simple Usage - Just pass your input dict
+# ============================================
 
-result = rag_retrieve(question)
+input_data = {
+    'Query': "Find company projects related to Finance Planning, Controlling, Facilities Finance, Budgeting & Forecasting, Cost Management, Financial Controls, Supplier Relationship Management, Business Intelligence, Data Analytics, KPI Dashboards, Activity-Based Costing, Data-Driven Decision Making.",
+    'project_types': ['Fintech / Banking Analytics', 'Video Analytics / Computer Vision']
+}
+
+result = rag_retrieve(input_data=input_data)
 print(f"💡 Answer:\n{result}\n")

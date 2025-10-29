@@ -174,17 +174,26 @@
 Vector Store Management Module
 """
 from typing import Dict, List, Optional
-from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchAny
-from langchain_qdrant import Qdrant
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_core.documents import Document
+import warnings
 import os
 from dotenv import load_dotenv
 
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Filter, 
+    FieldCondition, 
+    MatchAny, 
+    PayloadSchemaType
+)
+from langchain_qdrant import Qdrant
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.documents import Document
+
+# Suppress FutureWarning from huggingface
+warnings.filterwarnings("ignore", category=FutureWarning, module="huggingface_hub")
+
 # Load environment variables
 load_dotenv()
-
 class VectorStore:
     """Manages Qdrant vector store operations"""
     
@@ -217,10 +226,24 @@ class VectorStore:
             if self.verbose:
                 print(f"✅ Auto-connected to existing collection: {self.collection_name}")
     
+    # def _initialize_embeddings(self, model_name: str):
+    #     """Initialize HuggingFace embeddings"""
+    #     try:
+    #         self.embeddings = HuggingFaceEmbeddings(model_name=model_name)
+    #         if self.verbose:
+    #             print("✅ Embeddings initialized")
+    #     except Exception as e:
+    #         print(f"❌ Embeddings error: {e}")
+    #         raise
+
     def _initialize_embeddings(self, model_name: str):
         """Initialize HuggingFace embeddings"""
         try:
-            self.embeddings = HuggingFaceEmbeddings(model_name=model_name)
+            # Suppress deprecation warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=FutureWarning)
+                self.embeddings = HuggingFaceEmbeddings(model_name=model_name)
+            
             if self.verbose:
                 print("✅ Embeddings initialized")
         except Exception as e:
@@ -265,12 +288,53 @@ class VectorStore:
                 print(f"❌ Error connecting: {e}")
                 raise
     
+    # def create_embeddings(
+    #     self,
+    #     chunks: List[Document],
+    #     force_recreate: bool = False
+    # ) -> bool:
+    #     """Create embeddings in Qdrant"""
+    #     # Check if collection exists
+    #     if self.collection_exists():
+    #         if not force_recreate:
+    #             if self.verbose:
+    #                 print("✅ Collection already exists. Skipping creation.")
+    #             self._connect_to_collection()
+    #             return False
+    #         else:
+    #             if self.verbose:
+    #                 print("⚠️  Force recreate enabled. Deleting existing collection...")
+        
+    #     if not chunks:
+    #         print("❌ No chunks to upload")
+    #         return False
+        
+    #     if self.verbose:
+    #         print(f"⬆️  Uploading {len(chunks)} chunks to Qdrant...\n")
+        
+    #     try:
+    #         self.vectorstore = Qdrant.from_documents(
+    #             chunks,
+    #             self.embeddings,
+    #             url=self.qdrant_url,
+    #             api_key=self.qdrant_key,
+    #             collection_name=self.collection_name,
+    #             force_recreate=True
+    #         )
+    #         if self.verbose:
+    #             print("✅ Embeddings uploaded to Qdrant successfully!\n")
+    #         return True
+    #     except Exception as e:
+    #         print(f"❌ Error creating embeddings: {e}")
+    #         return False
+
     def create_embeddings(
-        self,
-        chunks: List[Document],
+        self, 
+        chunks: List[Document], 
         force_recreate: bool = False
     ) -> bool:
-        """Create embeddings in Qdrant"""
+        """Create embeddings in Qdrant with proper indexing"""
+        
         # Check if collection exists
         if self.collection_exists():
             if not force_recreate:
@@ -280,7 +344,8 @@ class VectorStore:
                 return False
             else:
                 if self.verbose:
-                    print("⚠️  Force recreate enabled. Deleting existing collection...")
+                    print("⚠️ Force recreate enabled. Deleting existing collection...")
+                self.client.delete_collection(self.collection_name)
         
         if not chunks:
             print("❌ No chunks to upload")
@@ -290,6 +355,7 @@ class VectorStore:
             print(f"⬆️  Uploading {len(chunks)} chunks to Qdrant...\n")
         
         try:
+            # Create collection with embeddings
             self.vectorstore = Qdrant.from_documents(
                 chunks,
                 self.embeddings,
@@ -298,13 +364,119 @@ class VectorStore:
                 collection_name=self.collection_name,
                 force_recreate=True
             )
+            
+            # Create payload indexes for filtering
+            try:
+                # Index for project_type (now a list of strings)
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="metadata.project_type",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+                
+                # Index for keywords (list of strings)
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="metadata.keywords",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+                
+                if self.verbose:
+                    print("✅ Payload indexes created for filtering")
+            except Exception as idx_error:
+                if self.verbose:
+                    print(f"⚠️ Index creation warning (may already exist): {idx_error}")
+            
             if self.verbose:
                 print("✅ Embeddings uploaded to Qdrant successfully!\n")
+            
             return True
+            
         except Exception as e:
             print(f"❌ Error creating embeddings: {e}")
             return False
-    
+
+
+    # def retrieve(
+    #     self, 
+    #     query: str, 
+    #     top_k: int = 3,
+    #     project_types: Optional[List[str]] = None,
+    #     keywords: Optional[List[str]] = None
+    # ) -> Dict:
+    #     """
+    #     Retrieve relevant documents with optional metadata filtering
+        
+    #     Args:
+    #         query: Search query
+    #         top_k: Number of results to return
+    #         project_types: Filter by project types (e.g., ["Healthcare AI", "Financial Analytics"])
+    #         keywords: Filter by keywords (e.g., ["machine learning", "data pipeline"])
+    #     """
+    #     if self.vectorstore is None:
+    #         if not self.collection_exists():
+    #             raise RuntimeError("❌ Embeddings not found! Create embeddings first.")
+    #         self._connect_to_collection()
+        
+    #     try:
+    #         # Build Qdrant filter if metadata filters are provided
+    #         search_kwargs = {"k": top_k}
+            
+    #         if project_types or keywords:
+    #             filter_conditions = []
+                
+    #             if project_types:
+    #                 filter_conditions.append(
+    #                     FieldCondition(
+    #                         key="metadata.project_type",
+    #                         match=MatchAny(any=project_types)
+    #                     )
+    #                 )
+                
+    #             if keywords:
+    #                 filter_conditions.append(
+    #                     FieldCondition(
+    #                         key="metadata.keywords",
+    #                         match=MatchAny(any=keywords)
+    #                     )
+    #                 )
+                
+    #             # Apply filter
+    #             search_kwargs["filter"] = Filter(must=filter_conditions)
+                
+    #             if self.verbose:
+    #                 print(f"🔍 Applying filters: project_types={project_types}, keywords={keywords}")
+            
+    #         results = self.vectorstore.similarity_search_with_score(query, **search_kwargs)
+            
+    #         documents = []
+    #         projects = []
+    #         similarities = []
+    #         sources = []
+    #         project_types_list = []
+    #         keywords_list = []
+            
+    #         for doc, score in results:
+    #             documents.append(doc.page_content)
+    #             projects.append(f"Project {doc.metadata.get('project_number', 'Unknown')}")
+    #             sources.append(doc.metadata.get('source', 'Unknown'))
+    #             project_types_list.append(doc.metadata.get('project_type', 'Unknown'))
+    #             keywords_list.append(doc.metadata.get('keywords', []))
+    #             similarities.append(float(score))
+            
+    #         return {
+    #             'documents': documents,
+    #             'projects': projects,
+    #             'sources': sources,
+    #             'project_types': project_types_list,
+    #             'keywords': keywords_list,
+    #             'similarities': similarities
+    #         }
+    #     except Exception as e:
+    #         print(f"❌ Error retrieving: {e}")
+    #         raise
+
+
     def retrieve(
         self, 
         query: str, 
@@ -318,8 +490,8 @@ class VectorStore:
         Args:
             query: Search query
             top_k: Number of results to return
-            project_types: Filter by project types (e.g., ["Healthcare AI", "Financial Analytics"])
-            keywords: Filter by keywords (e.g., ["machine learning", "data pipeline"])
+            project_types: Filter by project types (matches ANY in the list)
+            keywords: Filter by keywords (matches ANY in the list)
         """
         if self.vectorstore is None:
             if not self.collection_exists():
@@ -327,13 +499,14 @@ class VectorStore:
             self._connect_to_collection()
         
         try:
-            # Build Qdrant filter if metadata filters are provided
             search_kwargs = {"k": top_k}
             
+            # Build filters if provided
             if project_types or keywords:
                 filter_conditions = []
                 
                 if project_types:
+                    # Since project_type is now a list in metadata, use MatchAny
                     filter_conditions.append(
                         FieldCondition(
                             key="metadata.project_type",
@@ -349,14 +522,20 @@ class VectorStore:
                         )
                     )
                 
-                # Apply filter
                 search_kwargs["filter"] = Filter(must=filter_conditions)
                 
                 if self.verbose:
-                    print(f"🔍 Applying filters: project_types={project_types}, keywords={keywords}")
+                    print(f"🔍 Applying filters:")
+                    print(f"   - Project Types: {project_types}")
+                    print(f"   - Keywords: {keywords}\n")
             
+            # Perform search
             results = self.vectorstore.similarity_search_with_score(query, **search_kwargs)
             
+            if self.verbose and len(results) == 0:
+                print("⚠️ No results found with current filters. Try broader criteria.\n")
+            
+            # Format results
             documents = []
             projects = []
             similarities = []
@@ -368,7 +547,7 @@ class VectorStore:
                 documents.append(doc.page_content)
                 projects.append(f"Project {doc.metadata.get('project_number', 'Unknown')}")
                 sources.append(doc.metadata.get('source', 'Unknown'))
-                project_types_list.append(doc.metadata.get('project_type', 'Unknown'))
+                project_types_list.append(doc.metadata.get('project_type', ['Unknown']))
                 keywords_list.append(doc.metadata.get('keywords', []))
                 similarities.append(float(score))
             
@@ -380,6 +559,7 @@ class VectorStore:
                 'keywords': keywords_list,
                 'similarities': similarities
             }
+            
         except Exception as e:
             print(f"❌ Error retrieving: {e}")
             raise

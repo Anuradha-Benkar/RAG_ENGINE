@@ -186,6 +186,9 @@
 """
 Main RAG Service - Orchestrates all components
 """
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -347,20 +350,120 @@ class ProjectRAG:
             raise
 
 
-def rag_retrieve(question, project_types=None, keywords=None):
+# def rag_retrieve(question, project_types=None, keywords=None):
+#     """
+#     Retrieve documents for a question with optional metadata filtering
+    
+#     Args:
+#         question: User query
+#         project_types: Optional list of project types to filter
+#         keywords: Optional list of keywords to filter
+    
+#     Example:
+#         rag_retrieve("AI healthcare projects", project_types=["Healthcare AI"])
+#         rag_retrieve("machine learning projects", keywords=["machine learning", "AI"])
+#     """
+#     try:
+#         # Initialize RAG System
+#         rag = ProjectRAG(verbose=True)
+        
+#         # Step 1: Create embeddings (auto-skips if exists)
+#         print("="*100)
+#         print("STEP 1: CREATING/LOADING EMBEDDINGS")
+#         print("="*100 + "\n")
+        
+#         try:
+#             success = rag.create_embeddings(
+#                 data_folder=Config.RAG_DATA_FOLDER,
+#                 save_chunks=True,
+#                 force_recreate=False
+#             )
+#             if not success:
+#                 print("✅ Using existing collection (skipped recreation).")
+#         except Exception as e:
+#             print(f"❌ Error during embedding creation: {e}")
+#             import traceback
+#             traceback.print_exc()
+#             return str(e)
+
+#         try:
+#             if question:
+#                 result = rag.query(question, project_types=project_types, keywords=keywords)
+#             else:
+#                 print("⚠️  Please enter a valid query\n")
+#                 return None
+
+#         except Exception as e:
+#             print(f"❌ Error: {e}\n")
+#             return None
+
+#         return result
+    
+#     except Exception as e:
+#         print(f"❌ Fatal error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return str(e)
+
+
+def rag_retrieve(input_data=None, question=None, project_types=None, keywords=None):
     """
-    Retrieve documents for a question with optional metadata filtering
+    Retrieve documents with flexible input formats
     
     Args:
-        question: User query
-        project_types: Optional list of project types to filter
-        keywords: Optional list of keywords to filter
+        input_data: Dict with 'Query' and 'project_types' keys
+        OR
+        question: Direct query string
+        project_types: List or single string of project types
+        keywords: List of keywords
     
-    Example:
-        rag_retrieve("AI healthcare projects", project_types=["Healthcare AI"])
-        rag_retrieve("machine learning projects", keywords=["machine learning", "AI"])
+    Examples:
+        # Method 1: Dict input
+        input_data = {
+            'Query': "Find AI projects...",
+            'project_types': 'media_technology'
+        }
+        result = rag_retrieve(input_data=input_data)
+        
+        # Method 2: Direct parameters
+        result = rag_retrieve(
+            question="Find AI projects...",
+            project_types=["Healthcare", "Fintech / Banking Analytics"]
+        )
     """
     try:
+        # Parse input
+        if input_data:
+            query = input_data.get('Query', '')
+            filter_types = input_data.get('project_types')
+            filter_keywords = input_data.get('keywords')
+        else:
+            query = question
+            filter_types = project_types
+            filter_keywords = keywords
+        
+        # Normalize project_types to list
+        if filter_types:
+            if isinstance(filter_types, str):
+                # Map common aliases
+                type_mapping = {
+                    'media_technology': ['Media Technology'],
+                    'healthcare': ['Healthcare'],
+                    'fintech': ['Fintech / Banking Analytics'],
+                    'ai_platforms': ['AI / Generative AI Platforms'],
+                    'data_analytics': ['Data Analytics / Predictive Modeling'],
+                    'video_analytics': ['Video Analytics / Computer Vision'],
+                    'drone': ['AI-Based Surveillance / Drone Solutions'],
+                    'workflow': ['Agentic Workflow Systems']
+                }
+                filter_types = type_mapping.get(filter_types.lower(), [filter_types])
+            elif not isinstance(filter_types, list):
+                filter_types = [filter_types]
+        
+        # Normalize keywords to list
+        if filter_keywords and not isinstance(filter_keywords, list):
+            filter_keywords = [filter_keywords]
+        
         # Initialize RAG System
         rag = ProjectRAG(verbose=True)
         
@@ -376,26 +479,29 @@ def rag_retrieve(question, project_types=None, keywords=None):
                 force_recreate=False
             )
             if not success:
-                print("✅ Using existing collection (skipped recreation).")
+                print("✅ Using existing collection (skipped recreation).\n")
         except Exception as e:
             print(f"❌ Error during embedding creation: {e}")
             import traceback
             traceback.print_exc()
             return str(e)
-
-        try:
-            if question:
-                result = rag.query(question, project_types=project_types, keywords=keywords)
-            else:
-                print("⚠️  Please enter a valid query\n")
-                return None
-
-        except Exception as e:
-            print(f"❌ Error: {e}\n")
+        
+        # Step 2: Query with filters
+        print("="*100)
+        print("STEP 2: QUERYING WITH FILTERS")
+        print("="*100 + "\n")
+        
+        if query:
+            result = rag.query(
+                question=query,
+                project_types=filter_types,
+                keywords=filter_keywords
+            )
+            return result
+        else:
+            print("⚠️ Please enter a valid query\n")
             return None
-
-        return result
-    
+            
     except Exception as e:
         print(f"❌ Fatal error: {e}")
         import traceback
