@@ -345,6 +345,10 @@
 
 
 
+
+
+#################   TEST 2 ###################################
+
 """
 Text Processing and Chunking Module - Simple Rule-Based Version
 """
@@ -612,6 +616,232 @@ class TextProcessor:
                 if self.verbose:
                     print(f"\n{'='*100}")
                     print(f"📄 PROCESSING FILE: {filename}")
+                    print(f"{'='*100}")
+                
+                projects = self._extract_projects(text)
+                if self.verbose:
+                    print(f"  ✅ Found {len(projects)} projects in {filename}")
+                
+                for project in projects:
+                    doc = Document(
+                        page_content=project['content'],
+                        metadata={
+                            'source': filename,
+                            'project_number': project['number'],
+                            'file_specific_id': f"{filename}_{project['number']}",
+                            'project_type': project['project_type'],
+                            'keywords': project['keywords']
+                        }
+                    )
+                    file_chunks.append(doc)
+                
+                # Save chunks so next time we skip this file
+                with open(processed_file_path, 'w', encoding='utf-8') as f:
+                    json.dump([{
+                        "page_content": d.page_content,
+                        "metadata": d.metadata
+                    } for d in file_chunks], f, ensure_ascii=False, indent=2)
+
+                if self.verbose:
+                    print(f"  ✅ Completed processing {filename}\n")
+        
+        except Exception as e:
+            if self.verbose:
+                print(f"  ❌ Error processing {filename}: {e}\n")
+        
+        return file_chunks
+    
+
+
+
+################## test 3 ###################################################
+"""
+Text Processing and Chunking Module - LLM-Based Version
+"""
+import os
+import re
+import json
+from typing import List, Dict
+from langchain_core.documents import Document
+from groq import Groq
+
+
+class TextProcessor:
+    """Handles text processing and chunking with LLM-based metadata"""
+    
+    def __init__(self, groq_api_key: str = None, verbose: bool = True):
+        self.verbose = verbose
+        self.groq_api_key = groq_api_key
+        
+        # Initialize Groq client
+        if not self.groq_api_key:
+            self.groq_api_key = os.getenv("GROQ_API_KEY")
+        
+        if not self.groq_api_key:
+            raise ValueError("GROQ_API_KEY must be provided or set in environment")
+        
+        self.llm_client = Groq(api_key=self.groq_api_key)
+        
+        if self.verbose:
+            print("✅ Text Processor initialized (LLM-based metadata extraction)")
+
+        # Directory to store processed chunk info
+        self.processed_dir = "processed_chunks"
+        os.makedirs(self.processed_dir, exist_ok=True)
+    
+    def _extract_metadata_rule_based(self, text: str) -> Dict:
+        """Extract project types and keywords using LLM"""
+        
+        # Create prompt for LLM
+        prompt = f"""Analyze the following project description and provide:
+1. Project Types: Identify ALL relevant project types from this list (can be multiple):
+   - AI / Generative AI Platforms
+   - Data Analytics / Predictive Modeling
+   - Healthcare
+   - Agentic Workflow Systems
+   - Video Analytics / Computer Vision
+   - AI-Based Surveillance / Drone Solutions
+   - Fintech / Banking Analytics
+   - Media Technology
+   - General AI Solution (use only if none of the above fit)
+
+2. Keywords: Extract exactly 5 meaningful technical keywords that best describe this project.
+
+Project Description:
+{text[:1500]}
+
+Respond in this exact JSON format:
+{{
+    "project_types": ["type1", "type2"],
+    "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"]
+}}
+
+Important:
+- Return 1-3 most relevant project types
+- Return exactly 5 keywords (technical terms, technologies, domain-specific terms)
+- Use only the project types from the list above
+"""
+        
+        try:
+            # Call LLM
+            response = self.llm_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": "You are an expert at analyzing technical project descriptions. Always respond with valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=300
+            )
+            
+            # Parse response
+            result_text = response.choices[0].message.content.strip()
+            
+            # Extract JSON from response (handle cases where LLM adds extra text)
+            json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+            if json_match:
+                result_text = json_match.group(0)
+            
+            result = json.loads(result_text)
+            
+            # Validate and format
+            project_types = result.get("project_types", ["AI / Generative AI Platforms"])
+            keywords = result.get("keywords", [])
+            
+            # Ensure exactly 5 keywords
+            if len(keywords) < 5:
+                keywords.extend([f"General_{i}" for i in range(len(keywords), 5)])
+            keywords = keywords[:5]
+            
+            if self.verbose:
+                print(f"✅ LLM Extracted: Types={project_types}, Keywords={keywords}\n")
+            
+            return {
+                "project_type": project_types,
+                "keywords": keywords
+            }
+            
+        except Exception as e:
+            if self.verbose:
+                print(f"⚠️  LLM extraction failed: {e}. Using fallback.\n")
+            
+            # Fallback to basic extraction
+            return {
+                "project_type": ["AI / Generative AI Platforms"],
+                "keywords": ["AI", "Machine Learning", "Technology", "Automation", "Analysis"]
+            }
+    
+    def _extract_projects(self, text: str) -> List[Dict]:
+        """Extract projects from text"""
+        projects = []
+        lines = text.split('\n')
+        current_project = []
+        project_num = None
+        
+        for line in lines:
+            # Check if line starts a new project
+            if line.strip() and (
+                (line.strip()[0].isdigit() and '.' in line.split()[0]) or
+                line.strip().startswith('###')
+            ):
+                # Save previous project
+                if current_project:
+                    content = '\n'.join(current_project).strip()
+                    if content:
+                        # Extract metadata using LLM
+                        metadata = self._extract_metadata_rule_based(content)
+                        projects.append({
+                            'number': project_num,
+                            'content': content,
+                            'project_type': metadata.get('project_type', ['General AI Solution']),
+                            'keywords': metadata.get('keywords', [])
+                        })
+                
+                # Start new project
+                current_project = [line]
+                match = re.search(r'(\d+)', line)
+                if match:
+                    project_num = int(match.group(1))
+            else:
+                if current_project or line.strip():
+                    current_project.append(line)
+        
+        # Save last project
+        if current_project:
+            content = '\n'.join(current_project).strip()
+            if content:
+                metadata = self._extract_metadata_rule_based(content)
+                projects.append({
+                    'number': project_num,
+                    'content': content,
+                    'project_type': metadata.get('project_type', ['General AI Solution']),
+                    'keywords': metadata.get('keywords', [])
+                })
+        
+        return projects
+    
+    def process_file(self, filepath: str, filename: str) -> List[Document]:
+        """Process a single file and return chunks"""
+        file_chunks = []
+
+        # Check if this file's chunks are already created
+        processed_file_path = os.path.join(self.processed_dir, f"{filename}_chunks.json")
+        if os.path.exists(processed_file_path):
+            if self.verbose:
+                print(f"⚠️  Skipping {filename} — chunks already exist. Loading from cache (NO LLM CALL).")
+            with open(processed_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                for doc_data in data:
+                    file_chunks.append(Document(**doc_data))
+            return file_chunks  # RETURN EARLY - NO LLM CALLS!
+        
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                text = f.read()
+                
+                if self.verbose:
+                    print(f"\n{'='*100}")
+                    print(f"📄 PROCESSING NEW FILE: {filename} (LLM WILL BE CALLED)")
                     print(f"{'='*100}")
                 
                 projects = self._extract_projects(text)

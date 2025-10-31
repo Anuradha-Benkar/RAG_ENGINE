@@ -436,7 +436,8 @@ def rag_retrieve(input_data=None, question=None, project_types=None, keywords=No
         if input_data:
             query = input_data.get('Query', '')
             filter_types = input_data.get('project_types')
-            filter_keywords = input_data.get('keywords')
+            # filter_keywords = input_data.get('keywords')
+            filter_keywords = input_data.get('keywords') or input_data.get('Keywords')  # ← Support both
         else:
             query = question
             filter_types = project_types

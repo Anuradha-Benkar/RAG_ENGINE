@@ -39,8 +39,9 @@ from rag_service import rag_retrieve
 # ============================================
 
 input_data = {
-    'Query': "Find company projects related to Finance Planning, Controlling, Facilities Finance, Budgeting & Forecasting, Cost Management, Financial Controls, Supplier Relationship Management, Business Intelligence, Data Analytics, KPI Dashboards, Activity-Based Costing, Data-Driven Decision Making.",
-    'project_types': ['Fintech / Banking Analytics', 'Video Analytics / Computer Vision']
+    'Query': "Find projects related to  Production Technology, Hybrid Site Operations, IT Operations, Security Initiatives, Data Center Design.",
+    #'project_types': ['Fintech / Banking Analytics']
+    'keywords': ['Data Security']
 }
 
 result = rag_retrieve(input_data=input_data)
